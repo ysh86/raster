@@ -110,6 +110,78 @@ void rasterize(
             return;
         }
 
+#if 1
+        // Edge function (CCW)
+        const auto edgeFunc = [](const glm::vec2& a, const glm::vec2& b, const glm::vec2& c) {
+            const auto d1 = b - a;
+            const auto d2 = c - a;
+            return d1.x*d2.y - d1.y*d2.x;
+        };
+
+        // Check inside/outside tests for each pixel
+        const auto denom = edgeFunc(p1, p2, p3);
+        const bool back = denom < 0;
+        if (back && cullbackface) {
+            return;
+        }
+
+        // sort by Y
+        auto minYp = p1;
+        auto midYp = p2;
+        auto maxYp = p3;
+        if (minYp.y > midYp.y) {
+            auto temp = minYp;
+            minYp = midYp;
+            midYp = temp;
+        }
+        if (minYp.y > maxYp.y) {
+            auto temp = minYp;
+            minYp = maxYp;
+            maxYp = temp;
+        }
+        if (midYp.y > maxYp.y) {
+            auto temp = midYp;
+            midYp = maxYp;
+            maxYp = temp;
+        }
+
+        // calc mid
+        auto ratio = (maxYp.y - midYp.y) / (maxYp.y - minYp.y);
+        auto midR = (1.0f - ratio) * maxYp.x + ratio * minYp.x;
+        auto midL = midYp.x;
+        if (midL > midR) {
+            midL = midR;
+            midR = midYp.x;
+        }
+
+        // split & draw two triangles
+        auto ratioL = (midL - minYp.x) / (midYp.y - minYp.y);
+        auto ratioR = (midR - minYp.x) / (midYp.y - minYp.y);
+        for (int y = (int)(minYp.y + 0.5f); y < (int)(midYp.y + 0.5f); y++) {
+            float fy = y + 0.5f;
+            float fxL = ratioL * (fy - midYp.y) + midL;
+            float fxR = ratioR * (fy - midYp.y) + midR;
+            for (int x = (int)(fxL + 0.5f); x < (int)(fxR + 0.5f); x++) {
+                //float fx = x + 0.5f;
+                // varying attributes
+                // ...
+                fb.setPixel(x, y, glm::vec3{0.5f,0.5f,0.5f});
+            }
+        }
+        ratioL = (maxYp.x - midL) / (maxYp.y - midYp.y);
+        ratioR = (maxYp.x - midR) / (maxYp.y - midYp.y);
+        for (int y = (int)(midYp.y + 0.5f); y < (int)(maxYp.y + 0.5f); y++) {
+            float fy = y + 0.5f;
+            float fxL = ratioL * (fy - midYp.y) + midL;
+            float fxR = ratioR * (fy - midYp.y) + midR;
+            for (int x = (int)(fxL + 0.5f); x < (int)(fxR + 0.5f); x++) {
+                //float fx = x + 0.5f;
+                // varying attributes
+                // ...
+                fb.setPixel(x, y, glm::vec3{0.25f,0.25f,0.25f});
+            }
+        }
+#else
         // Bounding box in screen coordinates
         glm::vec2 min( Inf);
         glm::vec2 max(-Inf);
@@ -158,6 +230,7 @@ void rasterize(
                 fb.setPixel(x, y, fragmentShader(back ? -n : n, p_ndc));
             }
         }
+#endif
     };
 
     // Clip triangle
