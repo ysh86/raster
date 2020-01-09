@@ -162,10 +162,23 @@ void rasterize(
             float fxL = ratioL * (fy - midYp.y) + midL;
             float fxR = ratioR * (fy - midYp.y) + midR;
             for (int x = (int)(fxL + 0.5f); x < (int)(fxR + 0.5f); x++) {
-                //float fx = x + 0.5f;
+                float fx = x + 0.5f;
                 // varying attributes
-                // ...
-                fb.setPixel(x, y, glm::vec3{0.5f,0.5f,0.5f});
+                const auto p = glm::vec2(fx, fy);
+                const auto b1 = edgeFunc(p2, p3, p) / denom;
+                const auto b2 = edgeFunc(p3, p1, p) / denom;
+                const auto b3 = edgeFunc(p1, p2, p) / denom;
+                /*
+                const auto p_ndc = b1 * p1_ndc + b2 * p2_ndc + b3 * p3_ndc;
+                if (fb.zbuf[y*fb.w + x] < p_ndc.z) {
+                    continue;
+                }
+                fb.zbuf[y*fb.w + x] = p_ndc.z;
+                */
+                const auto n = glm::normalize(b1/v1.p.w*v1.n + b2/v2.p.w*v2.n + b3/v3.p.w*v3.n);
+                // color
+                const auto c = glm::abs(n);
+                fb.setPixel(x, y, c);
             }
         }
         ratioL = (maxYp.x - midL) / (maxYp.y - midYp.y);
@@ -175,10 +188,23 @@ void rasterize(
             float fxL = ratioL * (fy - midYp.y) + midL;
             float fxR = ratioR * (fy - midYp.y) + midR;
             for (int x = (int)(fxL + 0.5f); x < (int)(fxR + 0.5f); x++) {
-                //float fx = x + 0.5f;
+                float fx = x + 0.5f;
                 // varying attributes
-                // ...
-                fb.setPixel(x, y, glm::vec3{0.25f,0.25f,0.25f});
+                const auto p = glm::vec2(fx, fy);
+                const auto b1 = edgeFunc(p2, p3, p) / denom;
+                const auto b2 = edgeFunc(p3, p1, p) / denom;
+                const auto b3 = edgeFunc(p1, p2, p) / denom;
+                /*
+                const auto p_ndc = b1 * p1_ndc + b2 * p2_ndc + b3 * p3_ndc;
+                if (fb.zbuf[y*fb.w + x] < p_ndc.z) {
+                    continue;
+                }
+                fb.zbuf[y*fb.w + x] = p_ndc.z;
+                */
+                const auto n = glm::normalize(b1/v1.p.w*v1.n + b2/v2.p.w*v2.n + b3/v3.p.w*v3.n);
+                // color
+                const auto c = glm::abs(n);
+                fb.setPixel(x, y, c);
             }
         }
 #else
