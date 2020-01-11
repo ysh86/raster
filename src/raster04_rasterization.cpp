@@ -118,7 +118,7 @@ void rasterize(
             return d1.x*d2.y - d1.y*d2.x;
         };
 
-        // Check inside/outside tests for each pixel
+        // Cull backface
         const auto denom = edgeFunc(p1, p2, p3);
         const bool back = denom < 0;
         if (back && cullbackface) {
@@ -155,29 +155,80 @@ void rasterize(
         }
 
         // split & draw two triangles
+        const float p1_ndc_z = p1_ndc.z;
+        const float p2_ndc_z = p2_ndc.z;
+        const float p3_ndc_z = p3_ndc.z;
+        const float denominv = 1.0f/denom;
+        const float v1_n_x = v1.n.x / v1.p.w;
+        const float v1_n_y = v1.n.y / v1.p.w;
+        const float v1_n_z = v1.n.z / v1.p.w;
+        const float v2_n_x = v2.n.x / v2.p.w;
+        const float v2_n_y = v2.n.y / v2.p.w;
+        const float v2_n_z = v2.n.z / v2.p.w;
+        const float v3_n_x = v3.n.x / v3.p.w;
+        const float v3_n_y = v3.n.y / v3.p.w;
+        const float v3_n_z = v3.n.z / v3.p.w;
+
+        const auto d1_1_x = p3.x - p2.x;
+        const auto d1_1_y = p3.y - p2.y;
+
+        const auto d2_1_x = p1.x - p3.x;
+        const auto d2_1_y = p1.y - p3.y;
+
+        const auto d3_1_x = p2.x - p1.x;
+        const auto d3_1_y = p2.y - p1.y;
+
+        const float d1 = -d1_1_y;
+        const float d2 = -d2_1_y;
+        const float d3 = -d3_1_y;
+
         auto ratioL = (midL - minYp.x) / (midYp.y - minYp.y);
         auto ratioR = (midR - minYp.x) / (midYp.y - minYp.y);
         for (int y = (int)(minYp.y + 0.5f); y < (int)(midYp.y + 0.5f); y++) {
             float fy = y + 0.5f;
+            const auto d1_2_y = fy - p2.y;
+            const auto a1_1 = d1_1_x*d1_2_y + d1_1_y*p2.x;
+
+            const auto d2_2_y = fy - p3.y;
+            const auto a2_1 = d2_1_x*d2_2_y + d2_1_y*p3.x;
+
+            const auto d3_2_y = fy - p1.y;
+            const auto a3_1 = d3_1_x*d3_2_y + d3_1_y*p1.x;
+
+            const float a1 = a1_1;
+            const float a2 = a2_1;
+            const float a3 = a3_1;
+
             float fxL = ratioL * (fy - midYp.y) + midL;
             float fxR = ratioR * (fy - midYp.y) + midR;
             for (int x = (int)(fxL + 0.5f); x < (int)(fxR + 0.5f); x++) {
                 float fx = x + 0.5f;
                 // varying attributes
-                const auto p = glm::vec2(fx, fy);
-                const auto b1 = edgeFunc(p2, p3, p) / denom;
-                const auto b2 = edgeFunc(p3, p1, p) / denom;
-                const auto b3 = edgeFunc(p1, p2, p) / denom;
+                auto b1 = d1 * fx + a1;
+                auto b2 = d2 * fx + a2;
+                auto b3 = d3 * fx + a3;
                 /*
-                const auto p_ndc = b1 * p1_ndc + b2 * p2_ndc + b3 * p3_ndc;
-                if (fb.zbuf[y*fb.w + x] < p_ndc.z) {
+                const bool inside = (b1>0 && b2>0 && b3>0) || (b1<0 && b2<0 && b3<0);
+                if (!inside) {
                     continue;
                 }
-                fb.zbuf[y*fb.w + x] = p_ndc.z;
                 */
-                const auto n = glm::normalize(b1/v1.p.w*v1.n + b2/v2.p.w*v2.n + b3/v3.p.w*v3.n);
-                // color
-                const auto c = glm::abs(n);
+                b1 *= denominv;
+                b2 *= denominv;
+                b3 *= denominv;
+                const auto p_ndc_z = b1 * p1_ndc_z + b2 * p2_ndc_z + b3 * p3_ndc_z;
+                const bool depthGE = (fb.zbuf[y*fb.w + x] >= p_ndc_z);
+                if (/*!inside ||*/ !depthGE) {
+                    continue;
+                } else {
+                    fb.zbuf[y*fb.w + x] = p_ndc_z;
+                }
+                const auto n_x = b1 * v1_n_x + b2 * v2_n_x + b3 * v3_n_x;
+                const auto n_y = b1 * v1_n_y + b2 * v2_n_y + b3 * v3_n_y;
+                const auto n_z = b1 * v1_n_z + b2 * v2_n_z + b3 * v3_n_z;
+                auto n = n_x*n_x + n_y*n_y + n_z*n_z;
+                n = 1.0f / sqrt(n);
+                const auto c = glm::abs(glm::vec3{n_x*n, n_y*n, n_z*n});
                 fb.setPixel(x, y, c);
             }
         }
@@ -185,25 +236,49 @@ void rasterize(
         ratioR = (maxYp.x - midR) / (maxYp.y - midYp.y);
         for (int y = (int)(midYp.y + 0.5f); y < (int)(maxYp.y + 0.5f); y++) {
             float fy = y + 0.5f;
+            const auto d1_2_y = fy - p2.y;
+            const auto a1_1 = d1_1_x*d1_2_y + d1_1_y*p2.x;
+
+            const auto d2_2_y = fy - p3.y;
+            const auto a2_1 = d2_1_x*d2_2_y + d2_1_y*p3.x;
+
+            const auto d3_2_y = fy - p1.y;
+            const auto a3_1 = d3_1_x*d3_2_y + d3_1_y*p1.x;
+
+            const float a1 = a1_1;
+            const float a2 = a2_1;
+            const float a3 = a3_1;
+
             float fxL = ratioL * (fy - midYp.y) + midL;
             float fxR = ratioR * (fy - midYp.y) + midR;
             for (int x = (int)(fxL + 0.5f); x < (int)(fxR + 0.5f); x++) {
                 float fx = x + 0.5f;
                 // varying attributes
-                const auto p = glm::vec2(fx, fy);
-                const auto b1 = edgeFunc(p2, p3, p) / denom;
-                const auto b2 = edgeFunc(p3, p1, p) / denom;
-                const auto b3 = edgeFunc(p1, p2, p) / denom;
+                auto b1 = d1 * fx + a1;
+                auto b2 = d2 * fx + a2;
+                auto b3 = d3 * fx + a3;
                 /*
-                const auto p_ndc = b1 * p1_ndc + b2 * p2_ndc + b3 * p3_ndc;
-                if (fb.zbuf[y*fb.w + x] < p_ndc.z) {
+                const bool inside = (b1>0 && b2>0 && b3>0) || (b1<0 && b2<0 && b3<0);
+                if (!inside) {
                     continue;
                 }
-                fb.zbuf[y*fb.w + x] = p_ndc.z;
                 */
-                const auto n = glm::normalize(b1/v1.p.w*v1.n + b2/v2.p.w*v2.n + b3/v3.p.w*v3.n);
-                // color
-                const auto c = glm::abs(n);
+                b1 *= denominv;
+                b2 *= denominv;
+                b3 *= denominv;
+                const auto p_ndc_z = b1 * p1_ndc_z + b2 * p2_ndc_z + b3 * p3_ndc_z;
+                const bool depthGE = (fb.zbuf[y*fb.w + x] >= p_ndc_z);
+                if (/*!inside ||*/ !depthGE) {
+                    continue;
+                } else {
+                    fb.zbuf[y*fb.w + x] = p_ndc_z;
+                }
+                const auto n_x = b1 * v1_n_x + b2 * v2_n_x + b3 * v3_n_x;
+                const auto n_y = b1 * v1_n_y + b2 * v2_n_y + b3 * v3_n_y;
+                const auto n_z = b1 * v1_n_z + b2 * v2_n_z + b3 * v3_n_z;
+                auto n = n_x*n_x + n_y*n_y + n_z*n_z;
+                n = 1.0f / sqrt(n);
+                const auto c = glm::abs(glm::vec3{n_x*n, n_y*n, n_z*n});
                 fb.setPixel(x, y, c);
             }
         }
